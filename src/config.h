@@ -24,6 +24,6 @@
 /**
  * @brief Number of elements in the list
  */
-#define LIST_SIZE 5
+#define LIST_SIZE 10
 
 #endif

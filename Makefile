@@ -7,7 +7,7 @@ CFLAGS=-Wall -g
 all: main
 
 main: $(OBJ_DIR)/main.o $(OBJ_DIR)/algorithms.o
-	$(CC) $^ $(LD_FLAGS) -o $@
+	$(CC) $^ $(CFLAGS) $(LD_FLAGS) -o $@
 
 $(OBJ_DIR)/main.o: $(SRC_DIR)/main.c $(SRC_DIR)/config.h
 	$(CC) $(CFLAGS) -c $< -o $@

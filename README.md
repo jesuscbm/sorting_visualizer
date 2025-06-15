@@ -41,8 +41,11 @@ The visualizer can be configured in `src/config.h`. Options are:
 
 The new algorithm must be implemented in `src/algorithms.c` and declared in
 `src/algorithms.h`. The algorithms are executed in a separate thread, which has
-the advantage of us being able to reuse code from the algorithms directly, and
-merely insert `STEP(step, us_step)` when we want the visualizer to see the code.
+the advantage of us being able to reuse code from the algorithms directly. The
+only change needed is a call to the `step(info, red_index, green_index1,
+green_index2)` every time we want the visualizer to show a change (be it a
+swap, a comparison...). Green can be used to indicate the compared elements,
+and red to show a pivot or similar.
 
 ### Adding the algorithm to the code
 
@@ -75,8 +78,8 @@ Adding a new algorithm to the code is relatively simple. Steps to follow are:
     /* In main.c */
 	switch (state) {
         /* ... */
-        case BOGO_SORT:
-            new_sort(list, 0, LIST_SIZE - 1, US_STEP);
+        case NEW_SORT:
+            new_sort(&info);
             break;
         /* ... */
 	}
@@ -84,9 +87,7 @@ Adding a new algorithm to the code is relatively simple. Steps to follow are:
 
 ## TODO:
 
-- Consider semaphores so that code is genuinely multithreaded
 - Controls for speed and number of bars
 - Add sounds
-- Add multiple colors (f.e, red to indicate comparison)
 - Add more algorithms
 - Use SDL3_ttf??

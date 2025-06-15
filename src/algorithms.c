@@ -3,7 +3,10 @@
  * @brief Implementation of the different algorithms
  * @author Jesús Blázquez
  */
+#include <pthread.h>
+#include <stdarg.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #include "algorithms.h"
@@ -11,23 +14,23 @@
 #define MICRO		   1000000
 #define NANO_PER_MICRO 1000
 
-#define STEP(step, us_step) \
-	if (sorting_stop) \
-		return; \
-	step.tv_sec = us_step / MICRO; \
-	step.tv_nsec = (us_step % MICRO) * NANO_PER_MICRO; \
-	nanosleep(&step, NULL);
-
 volatile bool sorting_stop = false;
 
-void quick_sort(int* arr, int left, int right, int us_step)
-{
-	if (left >= right)
-		return;
+/**
+ * @brief Manages the sleep between steps
+ */
+void step(SortArgs* info, int red_index, int green_index1, int green_index2);
 
+void quick_sort(SortArgs* info)
+{
+	int* arr = info->list;
+	int left = info->left;
+	int right = info->right;
 	int pivot = arr[right];
 	int i = left - 1;
-	struct timespec step;
+
+	if (left >= right)
+		return;
 
 	for (int j = left; j < right; j++) {
 		if (arr[j] < pivot) {
@@ -36,7 +39,7 @@ void quick_sort(int* arr, int left, int right, int us_step)
 			int temp = arr[i];
 			arr[i] = arr[j];
 			arr[j] = temp;
-			STEP(step, us_step);
+			step(info, -1, j, right);
 		}
 	}
 
@@ -45,31 +48,79 @@ void quick_sort(int* arr, int left, int right, int us_step)
 	arr[i + 1] = arr[right];
 	arr[right] = temp;
 
-	STEP(step, us_step);
+	step(info, i+1, right, -1);
 
 	int pivot_index = i + 1;
-	quick_sort(arr, left, pivot_index - 1, us_step);
-	quick_sort(arr, pivot_index + 1, right, us_step);
+	info->left = left;
+	info->right = pivot_index - 1;
+	quick_sort(info);
+	info->left = pivot_index + 1;
+	info->right = right;
+	quick_sort(info);
 }
 
-void merge(int* arr, int left, int mid, int right, int us_step);
+void merge(SortArgs* info, int mid);
 
-void merge_sort(int* arr, int left, int right, int us_step)
+void merge_sort(SortArgs* info)
 {
+	int left = info->left;
+	int right = info->right;
 	if (left >= right)
 		return;
 
 	int mid = (left + right) / 2;
-	merge_sort(arr, left, mid, us_step);
-	merge_sort(arr, mid + 1, right, us_step);
-	merge(arr, left, mid, right, us_step);
+	info->left = left;
+	info->right = mid;
+	merge_sort(info);
+	info->left = mid + 1;
+	info->right = right;
+	merge_sort(info);
+
+	info->left = left;
+	info->right = right;
+	merge(info, mid);
 }
 
-void heapify(int* arr, int n, int i, int us_step, struct timespec* step)
+void merge(SortArgs* info, int mid)
 {
-	if (sorting_stop)
-		return;
+	int* arr = info->list;
+	int left = info->left;
+	int right = info->right;
+	int n1 = mid - left + 1;
+	int n2 = right - mid;
+	int L[n1], R[n2];
 
+	for (int i = 0; i < n1; i++)
+		L[i] = arr[left + i];
+	for (int j = 0; j < n2; j++)
+		R[j] = arr[mid + 1 + j];
+
+	int i = 0, j = 0, k = left;
+	while (i < n1 && j < n2) {
+		if (L[i] <= R[j]) {
+			arr[k++] = L[i++];
+		} else {
+			arr[k++] = R[j++];
+		}
+		step(info, -1, left + i, mid + 1 + j);
+	}
+
+	while (i < n1) {
+		arr[k++] = L[i++];
+		step(info, -1, left + i, -1);
+	}
+
+	while (j < n2) {
+		arr[k++] = R[j++];
+		step(info, -1, mid + 1 + j, -1);
+	}
+}
+
+void heapify(SortArgs* info)
+{
+	int n = info->left;
+	int i = info->right;
+	int* arr = info->list;
 	int largest = i;
 	int left = 2 * i + 1;
 	int right = 2 * i + 2;
@@ -83,95 +134,116 @@ void heapify(int* arr, int n, int i, int us_step, struct timespec* step)
 		int temp = arr[i];
 		arr[i] = arr[largest];
 		arr[largest] = temp;
-		STEP((*step), us_step);
-		heapify(arr, n, largest, us_step, step);
+		step(info, -1, i, largest);
+		info->left = n;
+		info->right = largest;
+		heapify(info);
 	}
 }
 
-void heap_sort(int* arr, int left, int right, int us_step)
+void heap_sort(SortArgs* info)
 {
+	int* arr = info->list;
+	int left = info->left;
+	int right = info->right;
 	int n = right - left + 1;
-	struct timespec step;
+
 	for (int i = n / 2 - 1; i >= 0; i--) {
-		heapify(arr, n, i, us_step, &step);
+		info->left = n;
+		info->right = i;
+		heapify(info);
 	}
 	for (int i = n - 1; i >= 0; i--) {
 		int temp = arr[0];
 		arr[0] = arr[i];
 		arr[i] = temp;
 
-		STEP(step, us_step);
+		step(info, -1, 0, i);
 
-		heapify(arr, i, 0, us_step, &step);
+		info->left = i;
+		info->right = 0;
+		heapify(info);
 	}
 }
 
-void insertion_sort(int* arr, int left, int right, int us_step)
+void insertion_sort(SortArgs* info)
 {
+	int* arr = info->list;
+	int left = info->left;
+	int right = info->right;
 	for (int i = left + 1; i <= right; i++) {
 		int key = arr[i];
 		int j = i - 1;
-		struct timespec step;
+
 		while (j >= left && arr[j] > key) {
 			arr[j + 1] = arr[j];
 			j--;
-			STEP(step, us_step);
+			step(info, -1, j, j + 1);
 		}
 		arr[j + 1] = key;
 	}
 }
 
-void bubble_sort(int* arr, int left, int right, int us_step)
+void bubble_sort(SortArgs* info)
 {
-	struct timespec step;
+	int* arr = info->list;
+	int left = info->left;
+	int right = info->right;
+
 	for (int i = left; i < right; i++) {
 		for (int j = left; j < right - i; j++) {
 			if (arr[j] > arr[j + 1]) {
 				int temp = arr[j];
 				arr[j] = arr[j + 1];
 				arr[j + 1] = temp;
-				STEP(step, us_step);
+				step(info, -1, j, j + 1);
 			}
 		}
 	}
 }
 
-void selection_sort(int* arr, int left, int right, int us_step)
+void selection_sort(SortArgs* info)
 {
-	struct timespec step;
+	int* arr = info->list;
+	int left = info->left;
+	int right = info->right;
 	for (int i = left; i < right; i++) {
 		int min_index = i;
 		for (int j = i + 1; j <= right; j++) {
 			if (arr[j] < arr[min_index]) {
 				min_index = j;
 			}
+			step(info, -1, j, min_index);
 		}
 		if (min_index != i) {
 			int temp = arr[i];
 			arr[i] = arr[min_index];
 			arr[min_index] = temp;
-			STEP(step, us_step);
+			step(info, i, -1, min_index);
 		}
 	}
 }
 
-bool is_sorted(int* arr, int left, int right);
+bool is_sorted(SortArgs* info);
 void shuffle(int* arr, int left, int right);
 
-void bogo_sort(int* arr, int left, int right, int us_step)
+void bogo_sort(SortArgs* info)
 {
-	struct timespec step;
-	while (!is_sorted(arr, left, right)) {
+	int* arr = info->list;
+	int left = info->left;
+	int right = info->right;
+	while (!is_sorted(info)) {
 		shuffle(arr, left, right);
-		STEP(step, us_step);
+		step(info, -1, -1, -1);
 	}
 }
 
-bool is_sorted(int* arr, int left, int right)
+bool is_sorted(SortArgs* info)
 {
-	for (int i = left; i < right; i++) {
-		if (arr[i] > arr[i + 1])
+	for (int i = info->left; i < info->right; i++) {
+		if (info->list[i] > info->list[i + 1])
 			return false;
+		step(info, -1, i, i+1);
 	}
 	return true;
 }
@@ -186,36 +258,24 @@ void shuffle(int* arr, int left, int right)
 	}
 }
 
-void merge(int* arr, int left, int mid, int right, int us_step)
+void step(SortArgs* info, int red_index, int green_index1, int green_index2)
 {
-	int n1 = mid - left + 1;
-	int n2 = right - mid;
-	int L[n1], R[n2];
-
 	struct timespec step;
-
-	for (int i = 0; i < n1; i++)
-		L[i] = arr[left + i];
-	for (int j = 0; j < n2; j++)
-		R[j] = arr[mid + 1 + j];
-
-	int i = 0, j = 0, k = left;
-	while (i < n1 && j < n2) {
-		if (L[i] <= R[j]) {
-			arr[k++] = L[i++];
-		} else {
-			arr[k++] = R[j++];
-		}
-		STEP(step, us_step);
+	if (sorting_stop) {
+		pthread_mutex_unlock(info->mutex);
+		pthread_exit(0);
 	}
 
-	while (i < n1) {
-		arr[k++] = L[i++];
-		STEP(step, us_step);
-	}
-
-	while (j < n2) {
-		arr[k++] = R[j++];
-		STEP(step, us_step);
-	}
+	memset(info->colors, WHITE, sizeof(Color) * LIST_SIZE);
+	if (red_index >= 0 && red_index < LIST_SIZE)
+		info->colors[red_index] = RED;
+	if (green_index1 >= 0 && green_index1 < LIST_SIZE)
+		info->colors[green_index1] = GREEN;
+	if (green_index2 >= 0 && green_index2 < LIST_SIZE)
+		info->colors[green_index2] = GREEN;
+	step = (struct timespec){ .tv_sec = info->us_step / MICRO,
+							  .tv_nsec = (info->us_step % MICRO) * NANO_PER_MICRO };
+	pthread_mutex_unlock(info->mutex);
+	nanosleep(&step, NULL);
+	pthread_mutex_lock(info->mutex);
 }
