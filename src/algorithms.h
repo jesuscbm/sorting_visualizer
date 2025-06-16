@@ -27,6 +27,7 @@ typedef enum Color { WHITE = 0, RED, GREEN } Color;
 typedef struct {
 	int* list;			   /**< List of integers */
 	Color* colors;		   /**< List of colors */
+	int *sound_index;	   /**< List of sound indexes */
 	int left;			   /**< Left index of the list */
 	int right;			   /**< Right index of the list */
 	int us_step;		   /**< Microseconds between step and step */

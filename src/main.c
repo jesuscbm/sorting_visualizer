@@ -3,12 +3,12 @@
  * @brief Main file. Contains the visualization
  * @author Jesús Blázquez
  */
-#include <SDL3/SDL.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
+#include <SDL3/SDL.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_pixels.h>
 #include <SDL3/SDL_rect.h>
@@ -21,7 +21,7 @@
 #include "config.h"
 
 /**
- * @brief Line height
+ * @brief Space between lines
  */
 #define LINE_HEIGHT 12
 
@@ -39,6 +39,16 @@ static SDL_Window* window;
  * @brief Renderer for the application
  */
 static SDL_Renderer* renderer;
+
+/**
+ * @brief Audio stream
+ */
+static SDL_AudioStream* stream = NULL;
+
+/**
+ * @brief Current sample of the sine wave. It wraps
+ */
+static int current_sine_sample = 0;
 
 /**
  * @brief Current state of the application
@@ -72,6 +82,11 @@ static Color* colors;
 SDL_FRect* rects;
 
 /**
+ * @brief Index of the sound to play
+ */
+static int sound_index = 0;
+
+/**
  * @brief Thread that does the sorting
  */
 pthread_t thread = 0;
@@ -102,34 +117,55 @@ void updateThread(void);
 void showMenu(void);
 
 /**
+ * Plays a sound at the given frequency
+ *
+ * @param freq Frequency
+ */
+void playAudio(float freq, float gain);
+
+/**
  * @brief Initializes the application. Called once
  */
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 {
+	SDL_AudioSpec spec;
 	if (!SDL_SetAppMetadata("Sorting Visualizer", "0.1", "org.sort")) {
-		fprintf(stderr, "Unable to set app metadata: %s\n", SDL_GetError());
+		SDL_Log("Unable to set app metadata: %s\n", SDL_GetError());
 		return SDL_APP_FAILURE;
 	}
-	if (!SDL_Init(SDL_INIT_VIDEO)) {
-		fprintf(stderr, "Unable to initialize SDL: %s\n", SDL_GetError());
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+		SDL_Log("Unable to initialize SDL: %s\n", SDL_GetError());
 		return SDL_APP_FAILURE;
 	}
 	SDL_CreateWindowAndRenderer("Sorting Visualizer", WIDTH, HEIGHT, 0, &window, &renderer);
 	if (!window) {
-		fprintf(stderr, "Unable to create window: %s\n", SDL_GetError());
+		SDL_Log("Unable to create window: %s\n", SDL_GetError());
 		return SDL_APP_FAILURE;
 	}
 	if (!renderer) {
-		fprintf(stderr, "Unable to create renderer: %s\n", SDL_GetError());
+		SDL_Log("Unable to create renderer: %s\n", SDL_GetError());
 		return SDL_APP_FAILURE;
 	}
+
+	/* Audio */
+	spec.channels = 1;
+	spec.format = SDL_AUDIO_F32;
+	spec.freq = 8000;
+	stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
+	if (!stream) {
+		SDL_Log("Couldn't create audio stream: %s", SDL_GetError());
+		return SDL_APP_FAILURE;
+	}
+
+	/* SDL_OpenAudioDeviceStream starts the device paused. You have to tell it to start! */
+	SDL_ResumeAudioStreamDevice(stream);
 
 	/* Prepare list */
 	srand(time(NULL));
 
 	list = calloc(LIST_SIZE, sizeof(int));
 	if (!list) {
-		fprintf(stderr, "Unable to allocate memory.\n");
+		SDL_Log("Unable to allocate memory.\n");
 		return SDL_APP_FAILURE;
 	}
 	shuffleList();
@@ -138,14 +174,14 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 
 	colors = calloc(LIST_SIZE, sizeof(Color));
 	if (!colors) {
-		fprintf(stderr, "Unable to allocate memory.\n");
+		SDL_Log("Unable to allocate memory.\n");
 		return SDL_APP_FAILURE;
 	}
 
 	/* Initialize rectangles */
 	rects = calloc(LIST_SIZE, sizeof(SDL_FRect));
 	if (!rects) {
-		fprintf(stderr, "Unable to allocate memory.\n");
+		SDL_Log("Unable to allocate memory.\n");
 		return SDL_APP_FAILURE;
 	}
 
@@ -200,6 +236,11 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 			break;
 		*/
 		case SDLK_ESCAPE:
+			if (state == MENU) {
+				state = QUITTING;
+				updateThread();
+				return SDL_APP_SUCCESS;
+			}
 			state = MENU;
 			updateThread();
 			break;
@@ -222,6 +263,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
  */
 SDL_AppResult SDL_AppIterate(void* appstate)
 {
+	float freq;
 	SDL_SetRenderDrawColorFloat(renderer, 0.0f, 0.0f, 0.0f, 1.0f);
 	SDL_RenderClear(renderer);
 
@@ -235,10 +277,10 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	pthread_mutex_lock(&mutex);
 	// Update rects according to the list
 	for (int i = 0; i < LIST_SIZE; i++) {
-		rects[i].x = 1.0f + i * ((float)WIDTH / LIST_SIZE);
+		rects[i].x = SPACING + i * ((float)(WIDTH - SPACING)/ LIST_SIZE);
 		rects[i].h = list[i] * ((float)HEIGHT / LIST_SIZE);
 		rects[i].y = HEIGHT - rects[i].h;
-		rects[i].w = ((float)WIDTH / LIST_SIZE) - 1.0f;
+		rects[i].w = ((float)WIDTH / LIST_SIZE) - SPACING;
 	}
 
 	// Paint them
@@ -257,8 +299,17 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		SDL_RenderFillRect(renderer, &rects[i]);
 	}
 	pthread_mutex_unlock(&mutex);
-	SDL_SetRenderDrawColorFloat(renderer, 1.0f, 1.0f, 1.0f, 1.0f);
 
+	if (sound_index < LIST_SIZE && sound_index >= 0) {
+		float t = (float)list[sound_index] / (LIST_SIZE - 1);
+		t = t * t * t;	// Exponential would be ideal but we are not like that
+		float gain = 1.5f - t;  // louder at low freq, softer at high freq
+		gain = (gain > 0.2f)? gain : 0.2f;
+		freq = MIN_FREQ + t * (MAX_FREQ - MIN_FREQ);
+		playAudio(freq, gain);
+	}
+
+	SDL_SetRenderDrawColorFloat(renderer, 1.0f, 1.0f, 1.0f, 1.0f);
 	SDL_RenderPresent(renderer);
 	return SDL_APP_CONTINUE;
 }
@@ -281,6 +332,7 @@ void* threadFunction(void* _)
 {
 	SortArgs info = { .list = list,
 					  .colors = colors,
+					  .sound_index = &sound_index,
 					  .left = 0,
 					  .right = LIST_SIZE - 1,
 					  .us_step = US_STEP,
@@ -320,6 +372,7 @@ void* threadFunction(void* _)
 
 	for (int i = 0; i < LIST_SIZE; i++)
 		colors[i] = GREEN;
+	sound_index = -1;
 	pthread_mutex_unlock(&mutex);
 
 	return NULL;
@@ -372,5 +425,29 @@ void shuffleList(void)
 		int temp = list[i];
 		list[i] = list[j];
 		list[j] = temp;
+	}
+}
+
+/* Code from the example. https://examples.libsdl.org/SDL3/audio/01-simple-playback */
+void playAudio(float freq, float gain)
+{
+	/* 8000 samples per second, we want few so 500 should be ok */
+	const int minimum_audio = (250 * sizeof(float)) / 2;
+	if (SDL_GetAudioStreamQueued(stream) < minimum_audio) {
+		static float samples[512];
+		int i;
+
+		for (i = 0; i < SDL_arraysize(samples); i++) {
+			const float phase = current_sine_sample * freq / 8000.0f;
+			samples[i] = SDL_sinf(phase * 2 * SDL_PI_F) * gain;
+			current_sine_sample++;
+		}
+
+		/* wrapping around to avoid floating-point errors */
+		current_sine_sample %= 500;
+
+		/* feed the new data to the stream. It will queue at the end, and trickle out as the
+		 * hardware needs more data. */
+		SDL_PutAudioStreamData(stream, samples, sizeof(samples));
 	}
 }

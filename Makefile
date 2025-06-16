@@ -1,4 +1,4 @@
-LD_FLAGS=-lSDL3
+LD_FLAGS=-lSDL3 -lpthread
 SRC_DIR=src
 OBJ_DIR=.
 CC=gcc
@@ -12,7 +12,7 @@ main: $(OBJ_DIR)/main.o $(OBJ_DIR)/algorithms.o
 $(OBJ_DIR)/main.o: $(SRC_DIR)/main.c $(SRC_DIR)/config.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/algorithms.o: $(SRC_DIR)/algorithms.c $(SRC_DIR)/algorithms.h
+$(OBJ_DIR)/algorithms.o: $(SRC_DIR)/algorithms.c $(SRC_DIR)/algorithms.h $(SRC_DIR)/config.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: clean

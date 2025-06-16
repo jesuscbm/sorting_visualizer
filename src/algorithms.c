@@ -18,8 +18,14 @@ volatile bool sorting_stop = false;
 
 /**
  * @brief Manages the sleep between steps
+ *
+ * @param info Structure with the needed arguments
+ * @param red_index Index of the red bar (-1 for none)
+ * @param green_index1 Index of the first green bar (-1 for none)
+ * @param green_index2 Index of the second green bar (-1 for none)
+ * @param sound_index Index of the bar whose sound to play (-1 for none)
  */
-void step(SortArgs* info, int red_index, int green_index1, int green_index2);
+void step(SortArgs* info, int red_index, int green_index1, int green_index2, int sound_index);
 
 void quick_sort(SortArgs* info)
 {
@@ -39,7 +45,7 @@ void quick_sort(SortArgs* info)
 			int temp = arr[i];
 			arr[i] = arr[j];
 			arr[j] = temp;
-			step(info, -1, j, right);
+			step(info, -1, j, right, j);
 		}
 	}
 
@@ -48,7 +54,7 @@ void quick_sort(SortArgs* info)
 	arr[i + 1] = arr[right];
 	arr[right] = temp;
 
-	step(info, i+1, right, -1);
+	step(info, i+1, right, -1, i+1);
 
 	int pivot_index = i + 1;
 	info->left = left;
@@ -102,17 +108,17 @@ void merge(SortArgs* info, int mid)
 		} else {
 			arr[k++] = R[j++];
 		}
-		step(info, -1, left + i, mid + 1 + j);
+		step(info, -1, left + i, mid + 1 + j, left + i);
 	}
 
 	while (i < n1) {
 		arr[k++] = L[i++];
-		step(info, -1, left + i, -1);
+		step(info, -1, left + i, -1, left + i);
 	}
 
 	while (j < n2) {
 		arr[k++] = R[j++];
-		step(info, -1, mid + 1 + j, -1);
+		step(info, -1, mid + 1 + j, -1, mid + 1 + j);
 	}
 }
 
@@ -134,7 +140,7 @@ void heapify(SortArgs* info)
 		int temp = arr[i];
 		arr[i] = arr[largest];
 		arr[largest] = temp;
-		step(info, -1, i, largest);
+		step(info, -1, i, largest, i);
 		info->left = n;
 		info->right = largest;
 		heapify(info);
@@ -158,7 +164,7 @@ void heap_sort(SortArgs* info)
 		arr[0] = arr[i];
 		arr[i] = temp;
 
-		step(info, -1, 0, i);
+		step(info, -1, 0, i, i);
 
 		info->left = i;
 		info->right = 0;
@@ -178,7 +184,7 @@ void insertion_sort(SortArgs* info)
 		while (j >= left && arr[j] > key) {
 			arr[j + 1] = arr[j];
 			j--;
-			step(info, -1, j, j + 1);
+			step(info, -1, j, j + 1, j);
 		}
 		arr[j + 1] = key;
 	}
@@ -196,7 +202,7 @@ void bubble_sort(SortArgs* info)
 				int temp = arr[j];
 				arr[j] = arr[j + 1];
 				arr[j + 1] = temp;
-				step(info, -1, j, j + 1);
+				step(info, -1, j, j + 1, j + 1);
 			}
 		}
 	}
@@ -213,13 +219,13 @@ void selection_sort(SortArgs* info)
 			if (arr[j] < arr[min_index]) {
 				min_index = j;
 			}
-			step(info, -1, j, min_index);
+			step(info, -1, j, min_index, j);
 		}
 		if (min_index != i) {
 			int temp = arr[i];
 			arr[i] = arr[min_index];
 			arr[min_index] = temp;
-			step(info, i, -1, min_index);
+			step(info, i, -1, min_index, min_index);
 		}
 	}
 }
@@ -234,7 +240,7 @@ void bogo_sort(SortArgs* info)
 	int right = info->right;
 	while (!is_sorted(info)) {
 		shuffle(arr, left, right);
-		step(info, -1, -1, -1);
+		step(info, -1, -1, -1, 0);
 	}
 }
 
@@ -243,7 +249,7 @@ bool is_sorted(SortArgs* info)
 	for (int i = info->left; i < info->right; i++) {
 		if (info->list[i] > info->list[i + 1])
 			return false;
-		step(info, -1, i, i+1);
+		step(info, -1, i, i+1, i);
 	}
 	return true;
 }
@@ -258,7 +264,7 @@ void shuffle(int* arr, int left, int right)
 	}
 }
 
-void step(SortArgs* info, int red_index, int green_index1, int green_index2)
+void step(SortArgs* info, int red_index, int green_index1, int green_index2, int sound_index)
 {
 	struct timespec step;
 	if (sorting_stop) {
@@ -266,6 +272,7 @@ void step(SortArgs* info, int red_index, int green_index1, int green_index2)
 		pthread_exit(0);
 	}
 
+	/* Set all the information for the viewer */
 	memset(info->colors, WHITE, sizeof(Color) * LIST_SIZE);
 	if (red_index >= 0 && red_index < LIST_SIZE)
 		info->colors[red_index] = RED;
@@ -273,6 +280,9 @@ void step(SortArgs* info, int red_index, int green_index1, int green_index2)
 		info->colors[green_index1] = GREEN;
 	if (green_index2 >= 0 && green_index2 < LIST_SIZE)
 		info->colors[green_index2] = GREEN;
+	*info->sound_index = sound_index;
+
+	/* Go to sleep */
 	step = (struct timespec){ .tv_sec = info->us_step / MICRO,
 							  .tv_nsec = (info->us_step % MICRO) * NANO_PER_MICRO };
 	pthread_mutex_unlock(info->mutex);

@@ -34,6 +34,9 @@ The visualizer can be configured in `src/config.h`. Options are:
 - `WIDTH` and `HEIGHT` for the window size
 - `US_STEP` between updates for the algorithms
 - `LIST_SIZE` for the size of the list
+- `SPACING` for the spacing between bars
+- `MIN_FREQ` for the frequency of the lowest element
+- `MAX_FREQ` for the frequency of the highest element
 
 ## Adding New Algorithms
 
@@ -43,9 +46,10 @@ The new algorithm must be implemented in `src/algorithms.c` and declared in
 `src/algorithms.h`. The algorithms are executed in a separate thread, which has
 the advantage of us being able to reuse code from the algorithms directly. The
 only change needed is a call to the `step(info, red_index, green_index1,
-green_index2)` every time we want the visualizer to show a change (be it a
-swap, a comparison...). Green can be used to indicate the compared elements,
-and red to show a pivot or similar.
+green_index2, sound_index)` every time we want the visualizer to show a change
+(be it a swap, a comparison...). Green can be used to indicate the compared
+elements, and red to show a pivot or similar. sound_index is the index of the
+element that should be played as a sound (bigger element, higher pitch).
 
 ### Adding the algorithm to the code
 
@@ -85,9 +89,8 @@ Adding a new algorithm to the code is relatively simple. Steps to follow are:
 	}
 ```
 
-## TODO:
+## Possible additions:
 
 - Controls for speed and number of bars
-- Add sounds
 - Add more algorithms
 - Use SDL3_ttf??
