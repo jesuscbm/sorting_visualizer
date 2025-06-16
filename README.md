@@ -1,5 +1,7 @@
 # Visualizer for Sorting Algorithms
 
+https://github.com/user-attachments/assets/867a9bb9-7f91-4009-9c5c-642edbe4becf
+
 Developed in C with [SDL3](https://examples.libsdl.org/SDL3/). This small
 project allows you to visualize how different sorting algorithms work, like
 those youtube videos we all have seen. This is not the first one nor the best
