@@ -54,7 +54,7 @@ void quick_sort(SortArgs* info)
 	arr[i + 1] = arr[right];
 	arr[right] = temp;
 
-	step(info, i+1, right, -1, i+1);
+	step(info, i + 1, right, -1, i + 1);
 
 	int pivot_index = i + 1;
 	info->left = left;
@@ -94,7 +94,10 @@ void merge(SortArgs* info, int mid)
 	int right = info->right;
 	int n1 = mid - left + 1;
 	int n2 = right - mid;
-	int L[n1], R[n2];
+	int *L, *R;
+
+	L = malloc((n1+n2) * sizeof(int));
+	R = L + n1;
 
 	for (int i = 0; i < n1; i++)
 		L[i] = arr[left + i];
@@ -108,18 +111,20 @@ void merge(SortArgs* info, int mid)
 		} else {
 			arr[k++] = R[j++];
 		}
-		step(info, -1, left + i, mid + 1 + j, left + i);
+		step(info, k-1, left + i, mid + 1 + j, k-1);
 	}
 
 	while (i < n1) {
 		arr[k++] = L[i++];
-		step(info, -1, left + i, -1, left + i);
+		step(info, -1, k-1, -1, k-1);
 	}
 
 	while (j < n2) {
 		arr[k++] = R[j++];
-		step(info, -1, mid + 1 + j, -1, mid + 1 + j);
+		step(info, -1, k-1, -1, k-1);
 	}
+
+    free(L);
 }
 
 void heapify(SortArgs* info)
@@ -249,7 +254,7 @@ bool is_sorted(SortArgs* info)
 	for (int i = info->left; i < info->right; i++) {
 		if (info->list[i] > info->list[i + 1])
 			return false;
-		step(info, -1, i, i+1, i);
+		step(info, -1, i, i + 1, i);
 	}
 	return true;
 }

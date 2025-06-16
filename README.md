@@ -38,6 +38,8 @@ The visualizer can be configured in `src/config.h`. Options are:
 - `MIN_FREQ` for the frequency of the lowest element
 - `MAX_FREQ` for the frequency of the highest element
 
+Once configured, the code must be compiled again with `make`.
+
 ## Adding New Algorithms
 
 ### Creating a New Algorithm
